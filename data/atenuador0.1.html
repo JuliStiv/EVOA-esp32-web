@@ -127,20 +127,20 @@
 
         <div class="control-panel">
             <div class="card">
-                <h3>Valor ADC: <span id="adcValue" class="status-value">205</span></h3>
+                <h3>ADC value: <span id="adcValue" class="status-value">205</span></h3>
                 <div class="slider-container">
                     <input type="range" id="setpointSlider" min="0" max="4095" value="205">
                 </div>
-                <p>Rango útil: [205 - 3890] </p>
+                <p>Range: [205 - 3890] </p>
                 <div style="margin-top:10px;">
                     <label>
-                        <input type="checkbox" id="manualMode"> Deshabilitar potenciómetro
+                        <input type="checkbox" id="manualMode"> Disable potentiometer
                     </label>
                 </div>
             </div>
 
             <div class="card">
-                <h3>Atenuación: <input type="number" id="attnInput" class="status-value" step="0.1"
+                <h3>Attenuation: <input type="number" id="attnInput" class="status-value" step="0.1"
                         style="width: 100px; border: none; border-bottom: 2px solid; background: transparent; color: inherit;">
                     dB</h3>
             </div>
@@ -148,16 +148,16 @@
     </div>
 
     <script>
+        const ADC_START = 205; // lower limit of useful adc range
+        const ADC_END = 3890;  // upper limit of useful adc range
+        const EXPECTED_LENGTH = ADC_END - ADC_START + 1; // 3686 elements
 
-        const ADC_START = 205; // Límite inferior del rango útil del ADC
-        const ADC_END = 3890;  // Límite superior del rango útil del ADC
-        const EXPECTED_LENGTH = ADC_END - ADC_START + 1; // 3686 elementos
-
-        // Parámetros del conversor ADC del ESP32 (12-bit)
+        // esp32 adc converter parameters (12-bit)
         const ADC_MAX = 4095;
-        const VREF = 3.3; // 3.3V como tensión de referencia del ADC del ESP32
+        const VREF = 3.3; // 3.3v reference voltage for esp32 adc
 
 
+        // --- theme constants ---
         const THEME = {
             LIGHT: { lineColor: '#0056b3', gridColor: '#e5e5e5', textColor: '#666' },
             DARK: { lineColor: '#4a90e2', gridColor: '#333', textColor: '#aaa' }
@@ -166,6 +166,8 @@
 
         let attenuationData = [];
         let chart;
+        let isWebControl = false; // local state
+        // is the web in control?
 
         const loadingMessage = document.getElementById('loadingMessage');
         const slider = document.getElementById('setpointSlider');
@@ -182,14 +184,14 @@
                 attnInput.disabled = true;
 
                 const response = await fetch('calibration_data.txt');
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) throw new Error(`http ${response.status}`);
 
                 const rawText = await response.text();
 
                 const parsedData = rawText.split(',').map(v => parseFloat(v.trim())).filter(n => !isNaN(n));
 
                 if (parsedData.length !== EXPECTED_LENGTH) {
-                    throw new Error(`Longitud de tabla incorrecta: ${parsedData.length} elementos. Se esperaban ${EXPECTED_LENGTH} valores, correspondientes al rango útil [${ADC_START} - ${ADC_END}].`);
+                    throw new Error(`incorrect table length: ${parsedData.length} elements. expected ${EXPECTED_LENGTH} values, corresponding to the useful range [${ADC_START} - ${ADC_END}].`);
                 }
 
                 attenuationData = parsedData;
@@ -198,17 +200,16 @@
                 attachEventListeners();
 
                 loadingMessage.style.display = 'none';
-                updateSystem(ADC_START);
+                updateSystem(ADC_START, true); // initial update, forces sending to esp32 regardless of iswebcontrol
 
             } catch (e) {
-                console.error("Error crítico de carga:", e);
-                loadingMessage.innerText = `ERROR de Carga: ${e.message}. Asegúrese de que el archivo existe y contiene ${EXPECTED_LENGTH} números válidos.`;
+                console.error("critical loading error:", e);
+                loadingMessage.innerText = `loading error: ${e.message}. ensure the file exists and contains ${EXPECTED_LENGTH} valid numbers.`;
                 loadingMessage.style.color = 'red';
             }
         }
 
         function findClosestADC(targetAttenuation) {
-            // Buscamos el índice que minimice la diferencia |(valor/10) - target|
             let closestIndex = -1;
             let minDiff = Infinity;
 
@@ -232,7 +233,7 @@
 
             const chartData = data.map((y, i) => ({
                 x: ADC_START + i,
-                y: y / 100.0
+                y: y / 100.0 
             }));
 
             const ctx = document.getElementById('evoaChart').getContext('2d');
@@ -241,7 +242,7 @@
                 type: 'line',
                 data: {
                     datasets: [{
-                        label: 'Curva de atenuación',
+                        label: 'Attenuation curve',
                         data: chartData,
                         borderColor: currentTheme.lineColor,
                         borderWidth: 2,
@@ -250,7 +251,7 @@
                         tension: 0.5
                     },
                     {
-                        label: 'Punto de operación',
+                        label: 'Operation point',
                         data: [],
                         borderColor: '#ff0000',
                         backgroundColor: '#ff0000',
@@ -262,18 +263,17 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    // Interacción para que el tooltip capture el punto más cercano en X
                     interaction: { mode: 'nearest', intersect: true },
                     scales: {
                         x: {
-                            title: { display: true, text: 'Código ADC (12 bit)', color: currentTheme.textColor },
+                            title: { display: true, text: 'adc code (12 bit)', color: currentTheme.textColor },
                             type: 'linear', min: 0, max: 4095,
                             grid: { color: currentTheme.gridColor },
                             ticks: { color: currentTheme.textColor }
                         },
                         y: {
-                            title: { display: true, text: 'Atenuación estimada [dB]', color: currentTheme.textColor },
-                            min: 0, max: 40,
+                            title: { display: true, text: 'Estimated attenuation [db]', color: currentTheme.textColor },
+                            min: 0, max: 40, // max is based on typical range, kept at 40 from your code
                             grid: { color: currentTheme.gridColor },
                             ticks: { color: currentTheme.textColor }
                         }
@@ -284,19 +284,21 @@
                             enabled: true,
                             usePointStyle: true,
                             boxWidth: 0,
+                            // filter to show tooltip only for operation point (dataset 1)
                             filter: function (tooltipItem) {
                                 return tooltipItem.datasetIndex === 1;
                             },
                             callbacks: {
+                                // title: (tooltipItems) => `adc: ${tooltipItems[0].parsed.x}`, // show adc value as title
                                 label: function (context) {
                                     const adcValue = context.parsed.x;
-                                    const attnDB = context.parsed.y;
+                                    const attnDB = context.parsed.y; // already scaled to db
 
-                                    const voltage = (adcValue / 4095) * 3.3;
+                                    const voltage = (adcValue / ADC_MAX) * VREF;
 
-                                    return [
-                                        `Atenuación: ${attnDB.toFixed(2)} dB`,
-                                        `Voltaje Est.: ${voltage.toFixed(3)} V`
+                                    return [    
+                                        `attenuation: ${attnDB.toFixed(2)} db`,
+                                        `est. voltage: ${voltage.toFixed(3)} v`
                                     ];
                                 }
                             }
@@ -306,24 +308,22 @@
             });
         }
 
-        function updateSystem(val) {
+        async function updateSystem(val, sendToESP32 = false) {
             val = parseInt(val);
 
-            // Lógica de clamping
+            // clamping logic
             if (val < ADC_START) val = ADC_START;
             if (val > ADC_END) val = ADC_END;
 
             slider.value = val;
             adcDisplay.innerText = val;
 
-            // Compensación de índice: val - ADC_START
             let index = val - ADC_START;
             let rawAttenuation = attenuationData[index];
 
-            // Corrección de escala: Valor_almacenado / 10.0 = Atenuación real en dB
-            let attenuation = (rawAttenuation || 0) / 100.0;
+            let attenuation = (rawAttenuation || 0) / 100.0; 
 
-            // Actualizamos el input solo si no es el elemento activo (para no interrumpir escritura)
+            // update input only if it's not the active element
             if (document.activeElement !== attnInput) {
                 attnInput.value = attenuation.toFixed(2);
             }
@@ -333,54 +333,93 @@
                 chart.update('none');
             }
 
-            console.log(`[COMANDO] Enviando SetPoint ADC: ${val}`);
-        }
-
-        function receiveBoardUpdate(boardADCValue) {
-            if (!manualModeCheckbox.checked) {
-                updateSystem(boardADCValue);
+            if (isWebControl || sendToESP32) {
+                await fetch(`/setControl?val=${val}`).catch(e => console.error("error sending setpoint:", e));
             }
         }
 
+        // esp32 -> web synchro
+        setInterval(async () => {
+            try {
+                // assumes esp32 returns {"sp": 205, "adc": 205} or similar
+                const response = await fetch('/status'); 
+                if (!response.ok) throw new Error("status code error");
+                const data = await response.json();
+
+                // data.sp = setpoint esp32 is currently using
+                
+                if (!isWebControl) {
+                    // if control is potentiometer (iswebcontrol=false), update web with board value
+                    // uses updateSystem which handles ui updates but avoids sending command back (sendtodesp32=false)
+                    updateSystem(data.sp, false); 
+                } else {
+                    // if control is web, just update the operation point based on the board's reported sp
+                    let index = data.sp - ADC_START;
+                    // scale correction is also applied here
+                    let attenuation = (attenuationData[index] || 0) / 100.0; 
+
+                    chart.data.datasets[1].data = [{ x: data.sp, y: attenuation }];
+                    chart.update('none');
+                }
+            } catch (e) {
+                console.warn("esp32 sync error: disconnected or /status endpoint failed.");
+            }
+        }, 250); // update frequency: 4 times per second
+
+        // the redundant function receiveboardupdate is removed
+
         function attachEventListeners() {
-            // A. CONTROL DEL SLIDER
+            // a. slider control
             slider.addEventListener('input', (e) => {
-                if (manualModeCheckbox.checked) {
-                    updateSystem(e.target.value);
+                if (isWebControl) { // use iswebcontrol state
+                    updateSystem(e.target.value, true); // explicit send
                 }
             });
 
-            // A2. CONTROL DEL INPUT DE ATENUACIÓN
+            // a2. attenuation input control
             attnInput.addEventListener('change', (e) => {
-                if (manualModeCheckbox.checked) {
+                if (isWebControl) { // use iswebcontrol state
                     const val = parseFloat(e.target.value);
                     if (!isNaN(val)) {
                         const newADC = findClosestADC(val);
-                        updateSystem(newADC);
+                        updateSystem(newADC, true); // explicit send
                     }
                 }
             });
-            // Opcional: permitir actualización al presionar Enter sin salir del foco
+
             attnInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
-                    attnInput.blur(); // Dispara 'change'
+                    attnInput.blur();
                 }
             });
 
-            // B. CONTROL DEL CHECKBOX
-            manualModeCheckbox.addEventListener('change', (e) => {
-                const isManual = e.target.checked;
+            // b. checkbox control (web/potentiometer switch)
+            manualModeCheckbox.addEventListener('change', async (e) => { // must be async
+                isWebControl = e.target.checked; // update global state
+                const isManual = isWebControl;
+
                 slider.disabled = !isManual;
                 attnInput.disabled = !isManual;
 
-                if (isManual) {
-                    updateSystem(slider.value);
-                } else {
-                    console.log("Control cedido al potenciómetro de la placa. Esperando valor externo.");
+                const mode = isManual ? "web" : "pot";
+                
+                try {
+                    // 1. send control mode command to esp32
+                    await fetch(`/setControl?mode=${mode}`);
+                    
+                    // 2. if switching to web control, send current slider value
+                    if (isManual) {
+                        updateSystem(slider.value, true);
+                    } else {
+                        console.log("control ceded to board potentiometer. waiting for external value.");
+                    }
+
+                } catch (error) {
+                    console.error("could not send mode command to esp32.");
                 }
             });
 
-            // C. Lógica del Tema 
+            // c. theme logic 
             themeBtn.addEventListener('click', () => {
                 let isDarkMode = localStorage.getItem('theme') === 'dark';
                 isDarkMode = !isDarkMode;
@@ -390,10 +429,8 @@
 
                 const newTheme = isDarkMode ? THEME.DARK : THEME.LIGHT;
 
-                // Actualizar colores del gráfico
                 chart.data.datasets[0].borderColor = newTheme.lineColor;
 
-                // Actualizar colores de escalas (simplificado)
                 const updateScaleColors = (scale) => {
                     scale.grid.color = newTheme.gridColor;
                     scale.ticks.color = newTheme.textColor;
