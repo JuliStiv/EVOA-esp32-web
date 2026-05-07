@@ -15,8 +15,8 @@
 // need a WebServer for http access on port 80.
 WebServer server(80);
 
-const char *ssid = "EVOA";  
-const char *password = "12345678"; 
+const char *ssid = "SSID";  
+const char *password = "PASSWORD"; 
 bool webControlEnabled = false;
 uint32_t webSetPoint = 205;
 
@@ -52,14 +52,14 @@ void setup()
     Serial.begin(115200);
     display.setBrightness(0x0f);
 
-    // Inicialización de Sistema de Archivos (LittleFS)
+    // File system init (LittleFS)
     if (!LittleFS.begin(true))
     {
-        Serial.println("CRÍTICO: Falló el montaje de LittleFS.");
+        Serial.println("Falló el montaje de LittleFS.");
         return;
     }
 
-    // Configuración de Red (Access Point)
+    // AP Config
     WiFi.softAP(ssid, password);
     Serial.println("\n--- EVOA Access Point ---");
     Serial.print("SSID: ");
@@ -67,7 +67,6 @@ void setup()
     Serial.print("IP: ");
     Serial.println(WiFi.softAPIP());
 
-    // Servir la librería Chart.js de forma estática
     server.serveStatic("/chart.js", LittleFS, "/chart.js");
 
     server.on("/", HTTP_GET, []()
@@ -97,7 +96,7 @@ void setup()
         server.send(200, "text/plain", "OK");
     } });
 
-    // Endpoint para que el HTML pida el estado actual (Polling)
+    // HTML actual state request (Polling)
     server.on("/status", HTTP_GET, []()
               {
     String json = "{\"adc\":" + String(getFilteredADC(JDSU_ADC_PIN)) + 
