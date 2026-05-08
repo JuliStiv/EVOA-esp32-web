@@ -8,13 +8,13 @@ The project is an improvement of the hardware design developed by [Karim Hacen](
 
 ## Final PCB
 
-<img src="images/pcb_final.jpg" width="700">
+<img src="images/pcb_final.jpeg" width="700">
 
 ---
 
 ## Web Interface
 
-<img src="images/web_interface.png" width="700">
+<img src="images/web_final.jpeg" width="700">
 
 To improve device monitoring and operation, the web interface includes real-time visualization of the attenuation/calibration curve and the control voltage applied to the optical attenuator.
 
