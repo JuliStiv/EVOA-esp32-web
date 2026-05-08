@@ -19,4 +19,5 @@ The project is an improvement of the hardware design developed by [Karim Hacen](
 To improve device monitoring and operation, the web interface includes real-time visualization of the attenuation/calibration curve and the control voltage applied to the optical attenuator.
 
 The system also allows enabling or disabling an external potentiometer, providing both local manual control and remote web-based operation.
+
 ---
